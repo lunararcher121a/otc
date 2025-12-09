@@ -81,6 +81,8 @@
      uint8_t getSoul() { return m_soul; }
      uint8_t getLevelPercent() { return m_levelPercent; }
      uint8_t getHarmony() { return m_harmony; }
+     bool getSerene() { return m_serene; }
+     size_t getPreWalkingSize() { return m_preWalks.size(); }
  
      uint16_t getLevel() { return m_level; }
      uint16_t getSkillLevel(const Otc::Skill skill) { return m_skills[skill].level; }
