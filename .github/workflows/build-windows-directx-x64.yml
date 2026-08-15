@@ -2,6 +2,10 @@ name: Build Windows x64 DirectX
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-windows-directx-x64.yml"
   push:
     branches: [main]
     paths:
@@ -9,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   build:
@@ -22,6 +27,8 @@ jobs:
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -29,30 +36,45 @@ jobs:
           vcpkgDirectory: ${{ github.workspace }}/vcpkg
           vcpkgGitCommitId: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
 
-      - name: Cache vcpkg dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            vc17/vcpkg_installed
-            vcpkg/downloads
-          key: otc-vcpkg-windows-x64-${{ hashFiles('vcpkg.json') }}
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          $installed = Join-Path $env:GITHUB_WORKSPACE "vcpkg_installed"
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            --triplet x64-windows-static `
+            --host-triplet x64-windows `
+            "--x-manifest-root=$env:GITHUB_WORKSPACE" `
+            "--x-install-root=$installed"
+          if ($LASTEXITCODE -ne 0) {
+            throw "vcpkg install failed with exit code $LASTEXITCODE"
+          }
+
+          $protoc = Get-ChildItem -Path $installed -Recurse -Filter "protoc.exe" |
+            Where-Object { $_.FullName -match "\\tools\\protobuf\\protoc\.exe$" } |
+            Select-Object -First 1
+          if (-not $protoc) {
+            Get-ChildItem -Path $installed -Recurse -Filter "*protoc*" | Select-Object FullName
+            throw "protoc.exe was not found after successful vcpkg installation"
+          }
+
+          "VCPKG_INSTALLED_ROOT=$installed" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "PROTOC_EXE=$($protoc.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Using protoc: $($protoc.FullName)"
 
       - name: Build DirectX x64
         shell: pwsh
-        env:
-          VCPKG_BINARY_SOURCES: clear
         run: |
           $outDir = Join-Path $env:GITHUB_WORKSPACE "build-output"
-          $hostBin = Join-Path $env:GITHUB_WORKSPACE "vc17\vcpkg_installed\x64-windows\bin"
-          $env:PATH = "$hostBin;$env:PATH"
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
           msbuild.exe vc17/otclient.sln `
             /m `
             /p:Configuration=DirectX `
             /p:Platform=x64 `
             /p:VcpkgEnableManifest=true `
-            /p:VcpkgRoot="$env:GITHUB_WORKSPACE\vcpkg" `
-            /p:ProtocPath="$env:GITHUB_WORKSPACE\vc17\vcpkg_installed\x64-windows\tools\protobuf\protoc.exe" `
+            /p:VcpkgManifestInstall=false `
+            /p:VcpkgRoot="$env:VCPKG_ROOT" `
+            /p:VcpkgInstalledDir="$env:VCPKG_INSTALLED_ROOT\" `
+            /p:ProtocPath="$env:PROTOC_EXE" `
             /p:OutDir="$outDir\"
 
       - name: Verify executable
