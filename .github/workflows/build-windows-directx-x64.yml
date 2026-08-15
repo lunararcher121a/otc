@@ -31,6 +31,8 @@ jobs:
 
       - name: Build DirectX x64
         shell: pwsh
+        env:
+          VCPKG_BINARY_SOURCES: clear
         run: |
           $outDir = Join-Path $env:GITHUB_WORKSPACE "build-output"
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
