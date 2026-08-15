@@ -1,0 +1,78 @@
+name: Build Windows x64 DirectX
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/build-windows-directx-x64.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: DirectX x64 Release
+    runs-on: windows-2022
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgDirectory: ${{ github.workspace }}/vcpkg
+          vcpkgGitCommitId: b322364f06308bdd24823f9d8f03fe0cc86fd46f
+
+      - name: Build DirectX x64
+        shell: pwsh
+        run: |
+          $outDir = Join-Path $env:GITHUB_WORKSPACE "build-output"
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+          msbuild.exe vc17/otclient.sln `
+            /m `
+            /p:Configuration=DirectX `
+            /p:Platform=x64 `
+            /p:VcpkgEnableManifest=true `
+            /p:VcpkgRoot="$env:GITHUB_WORKSPACE\vcpkg" `
+            /p:OutDir="$outDir\"
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build-output -Recurse -Filter "otclient_dx_x64.exe" | Select-Object -First 1
+          if (-not $exe) {
+            Get-ChildItem -Path build-output -Recurse | Select-Object FullName
+            throw "otclient_dx_x64.exe was not produced"
+          }
+          "OTCLIENT_EXE=$($exe.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Prepare complete client package
+        shell: pwsh
+        run: |
+          $package = Join-Path $env:GITHUB_WORKSPACE "package"
+          New-Item -ItemType Directory -Force -Path $package | Out-Null
+          Copy-Item -LiteralPath $env:OTCLIENT_EXE -Destination (Join-Path $package "otclient_dx_x64.exe")
+          foreach ($dir in @("data", "modules", "mods")) {
+            if (Test-Path -LiteralPath $dir) {
+              Copy-Item -LiteralPath $dir -Destination $package -Recurse -Force
+            }
+          }
+          foreach ($file in @("init.lua", "otclientrc.lua", "cacert.pem")) {
+            if (Test-Path -LiteralPath $file) {
+              Copy-Item -LiteralPath $file -Destination $package -Force
+            }
+          }
+
+      - name: Upload Windows x64 DirectX client
+        uses: actions/upload-artifact@v4
+        with:
+          name: otc-windows-x64-directx
+          path: package/
+          if-no-files-found: error
+          retention-days: 30
