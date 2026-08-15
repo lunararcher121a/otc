@@ -42,6 +42,7 @@ jobs:
             /p:Platform=x64 `
             /p:VcpkgEnableManifest=true `
             /p:VcpkgRoot="$env:GITHUB_WORKSPACE\vcpkg" `
+            /p:ProtocPath="$env:GITHUB_WORKSPACE\vc17\vcpkg_installed\x64-windows\tools\protobuf\protoc.exe" `
             /p:OutDir="$outDir\"
 
       - name: Verify executable
