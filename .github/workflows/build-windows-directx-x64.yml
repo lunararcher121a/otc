@@ -29,12 +29,22 @@ jobs:
           vcpkgDirectory: ${{ github.workspace }}/vcpkg
           vcpkgGitCommitId: cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3
 
+      - name: Cache vcpkg dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            vc17/vcpkg_installed
+            vcpkg/downloads
+          key: otc-vcpkg-windows-x64-${{ hashFiles('vcpkg.json') }}
+
       - name: Build DirectX x64
         shell: pwsh
         env:
           VCPKG_BINARY_SOURCES: clear
         run: |
           $outDir = Join-Path $env:GITHUB_WORKSPACE "build-output"
+          $hostBin = Join-Path $env:GITHUB_WORKSPACE "vc17\vcpkg_installed\x64-windows\bin"
+          $env:PATH = "$hostBin;$env:PATH"
           New-Item -ItemType Directory -Force -Path $outDir | Out-Null
           msbuild.exe vc17/otclient.sln `
             /m `
